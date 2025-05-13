@@ -45,7 +45,7 @@ void DualHardwarePWM::configureTimer(Tcc* timer, uint8_t gclk_id) {
 
     // Set frequency
     const uint32_t prescaler = 1024;
-    timer->CTRLA.bit.PRESCALER = TCC_CTRLA_PRESCALER_DIV1024;
+    timer->CTRLA.bit.PRESCALER = 0x07;  // Prescaler 1024
     timer->PER.reg = (48000000UL / (prescaler * _frequency)) - 1;
     while (timer->SYNCBUSY.bit.PER);
 
