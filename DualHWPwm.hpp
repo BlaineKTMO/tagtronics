@@ -6,10 +6,10 @@
 class DualHardwarePWM {
 public:
     DualHardwarePWM(uint8_t pin1, uint8_t pin2);
-    
     void begin(uint32_t frequency = 60);
     void setDutyCycle1(float percent);
     void setDutyCycle2(float percent);
+    void end(); // Safely disable PWM and reset pins
 
 private:
     uint8_t _pin1, _pin2;
