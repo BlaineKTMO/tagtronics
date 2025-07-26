@@ -2,138 +2,32 @@
 #include <Arduino.h>
 
 DualHardwarePWM::DualHardwarePWM(uint8_t pin1, uint8_t pin2) 
-  : _pin1(pin1), _pin2(pin2), _timer1(nullptr), _timer2(nullptr), 
-    _cc_channel1(0), _cc_channel2(0) {}
+  : _pin1(pin1), _pin2(pin2), _timer1(nullptr), _timer2(nullptr) {}
 
 void DualHardwarePWM::begin(uint32_t frequency) {
     _frequency = frequency;
-    bool timer1_configured = false;
-    
-    // Check if this is a re-initialization with same pins
-    static bool initialized = false;
-    static uint8_t last_pin1 = 0xFF;
-    static uint8_t last_pin2 = 0xFF;
-    
-    // If same pins and already initialized, just update frequency
-    if (initialized && last_pin1 == _pin1 && last_pin2 == _pin2) {
-        if (_timer1) {
-            configureTimer(_timer1, 0x1A);  // Default to TCC0/TCC1 GCLK ID
-        }
-        if (_timer2 && _timer2 != _timer1) {
-            uint8_t gclk_id = (_timer2 == TCC2) ? 0x1B : 0x1A;
-            configureTimer(_timer2, gclk_id);
-        }
-        return;
-    }
-    
-    // Remember pins for future calls
-    last_pin1 = _pin1;
-    last_pin2 = _pin2;
-    initialized = true;
 
-    // Structure for pin mapping
-    struct PinInfo {
-        uint8_t pin;
-        Tcc* timer;
-        uint8_t cc_channel;
-        uint8_t gclk_id;
-        uint8_t port_pin;
-        uint8_t pmux_index;
-        uint8_t pmux_position;
-        uint8_t mux_val;
-    };
-
-    // Pin mapping table for Feather M0
-    const PinInfo pinMap[] = {
-        // D5: PA15 - TCC0/WO[1]
-        {5, TCC0, 1, 0x1A, 15, 7, 1, 0x05},  // Function F
-        
-        // D6: PA20 - TCC0/WO[0]
-        {6, TCC0, 0, 0x1A, 20, 10, 0, 0x05}, // Function F
-        
-        // D9: PA07 - TCC1/WO[1]
-        {9, TCC1, 1, 0x1A, 7, 3, 1, 0x04},   // Function E
-        
-        // D10: PA18 - TCC1/WO[2]
-        {10, TCC1, 2, 0x1A, 18, 9, 0, 0x04}, // Function E
-        
-        // D11: PA16 - TCC1/WO[0]
-        {11, TCC1, 0, 0x1A, 16, 8, 0, 0x04}, // Function E
-        
-        // // D12: PA19 - TCC1/WO[3]
-        // {12, TCC1, 3, 0x1A, 19, 9, 1, 0x04}, // Function E
-        //   // D13: PA17 - TCC2/WO[1]
-        // {13, TCC2, 1, 0x1B, 17, 8, 1, 0x04}  // Function E - Corrected GCLK ID
-    };
-    const uint8_t numPins = sizeof(pinMap) / sizeof(pinMap[0]);
-
-    // Configure first pin
-    for (uint8_t i = 0; i < numPins; i++) {
-        if (pinMap[i].pin == _pin1) {
-            // Enable timer clock
-            if (pinMap[i].timer == TCC0) PM->APBCMASK.reg |= PM_APBCMASK_TCC0;
-            else if (pinMap[i].timer == TCC1) PM->APBCMASK.reg |= PM_APBCMASK_TCC1;
-            else if (pinMap[i].timer == TCC2) PM->APBCMASK.reg |= PM_APBCMASK_TCC2;
-
-            // Configure pin multiplexing
-            PORT->Group[0].PINCFG[pinMap[i].port_pin].bit.PMUXEN = 1;
-            if (pinMap[i].pmux_position == 0) {
-                PORT->Group[0].PMUX[pinMap[i].pmux_index].bit.PMUXE = pinMap[i].mux_val;
-            } else {
-                PORT->Group[0].PMUX[pinMap[i].pmux_index].bit.PMUXO = pinMap[i].mux_val;
-            }
-
-            _timer1 = pinMap[i].timer;
-            _cc_channel1 = pinMap[i].cc_channel;
-            timer1_configured = true;
-            configureTimer(_timer1, pinMap[i].gclk_id);
-            break;
-        }
+    // Configure Pin 10 (PA18, TCC0/WO[2])
+    if (_pin1 == 10) {
+        PM->APBCMASK.reg |= PM_APBCMASK_TCC0;  // Enable TCC0 clock
+        _timer1 = TCC0;
+        PORT->Group[PORTA].PINCFG[18].bit.PMUXEN = 1;
+        PORT->Group[PORTA].PMUX[9].bit.PMUXE = PORT_PMUX_PMUXE_E_Val;  // Function E
+        configureTimer(_timer1, TCC0_GCLK_ID);
     }
 
-    // Configure second pin
-    for (uint8_t i = 0; i < numPins; i++) {
-        if (pinMap[i].pin == _pin2) {
-            // Skip if same timer already configured
-            bool same_timer = (_timer1 == pinMap[i].timer);
-            
-            // Enable timer clock if different
-            if (!same_timer) {
-                if (pinMap[i].timer == TCC0) PM->APBCMASK.reg |= PM_APBCMASK_TCC0;
-                else if (pinMap[i].timer == TCC1) PM->APBCMASK.reg |= PM_APBCMASK_TCC1;
-                else if (pinMap[i].timer == TCC2) PM->APBCMASK.reg |= PM_APBCMASK_TCC2;
-            }
-
-            // Configure pin multiplexing
-            PORT->Group[0].PINCFG[pinMap[i].port_pin].bit.PMUXEN = 1;
-            if (pinMap[i].pmux_position == 0) {
-                PORT->Group[0].PMUX[pinMap[i].pmux_index].bit.PMUXE = pinMap[i].mux_val;
-            } else {
-                PORT->Group[0].PMUX[pinMap[i].pmux_index].bit.PMUXO = pinMap[i].mux_val;
-            }
-
-            _timer2 = pinMap[i].timer;
-            _cc_channel2 = pinMap[i].cc_channel;
-            
-            // Configure timer if not already done
-            if (!same_timer || !timer1_configured) {
-                configureTimer(_timer2, pinMap[i].gclk_id);
-            }
-            break;
-        }
+    // Configure Pin 11 (PA16, TCC1/WO[0])
+    if (_pin2 == 11) {
+        PM->APBCMASK.reg |= PM_APBCMASK_TCC1;  // Enable TCC1 clock
+        _timer2 = TCC1;
+        PORT->Group[PORTA].PINCFG[16].bit.PMUXEN = 1;
+        PORT->Group[PORTA].PMUX[8].bit.PMUXE = PORT_PMUX_PMUXE_E_Val;  // Function E
+        configureTimer(_timer2, TCC1_GCLK_ID);
     }
 }
 
 void DualHardwarePWM::configureTimer(Tcc* timer, uint8_t gclk_id) {
-    // Check if timer is already enabled and configured
-    bool timer_was_enabled = timer->CTRLA.bit.ENABLE;
-    if (timer_was_enabled) {
-        // Safely disable first before reconfiguration
-        timer->CTRLA.bit.ENABLE = 0;
-        while (timer->SYNCBUSY.bit.ENABLE);
-    }
-
-    // Enable GCLK for timer
+    // Enable clock
     GCLK->CLKCTRL.reg = GCLK_CLKCTRL_CLKEN | 
                         GCLK_CLKCTRL_GEN_GCLK0 | 
                         GCLK_CLKCTRL_ID(gclk_id);
@@ -145,21 +39,14 @@ void DualHardwarePWM::configureTimer(Tcc* timer, uint8_t gclk_id) {
     timer->CTRLA.bit.SWRST = 1;
     while (timer->SYNCBUSY.bit.SWRST);
 
-    // Set waveform generation mode
+    // Waveform setup
     timer->WAVE.reg = TCC_WAVE_WAVEGEN_NPWM;
-    while (timer->SYNCBUSY.bit.WAVE);    // Set frequency (prescaler 1024)
+    while (timer->SYNCBUSY.bit.WAVE);
+
+    // Set frequency
     const uint32_t prescaler = 1024;
-    timer->CTRLA.bit.PRESCALER = TCC_CTRLA_PRESCALER_DIV1024;
-    
-    // Calculate period value
-    uint32_t period = (48000000UL / (prescaler * _frequency)) - 1;
-    
-    // TCC2 is 16-bit, so limit the period value if needed
-    if (timer == TCC2 && period > 0xFFFF) {
-        period = 0xFFFF;
-    }
-    
-    timer->PER.reg = period;
+    timer->CTRLA.bit.PRESCALER = 0x07;  // Prescaler 1024
+    timer->PER.reg = (48000000UL / (prescaler * _frequency)) - 1;
     while (timer->SYNCBUSY.bit.PER);
 
     // Enable timer
@@ -170,18 +57,10 @@ void DualHardwarePWM::configureTimer(Tcc* timer, uint8_t gclk_id) {
 void DualHardwarePWM::setDutyCycle(Tcc* timer, uint8_t cc_channel, float percent) {
     if (!timer) return;
     
-    percent = constrain(percent, 0.0f, 100.0f);
     const uint32_t per = timer->PER.reg;
-    uint32_t cc_value = (per * percent) / 100;
+    timer->CC[cc_channel].reg = (per * constrain(percent, 0, 100)) / 100;
     
-    // Extra safety check for TCC2 (16-bit)
-    if (timer == TCC2 && cc_value > 0xFFFF) {
-        cc_value = 0xFFFF;
-    }
-    
-    timer->CC[cc_channel].reg = cc_value;
-    
-    // Wait for synchronization
+    // Wait for CC channel sync
     switch (cc_channel) {
         case 0: while (timer->SYNCBUSY.bit.CC0); break;
         case 1: while (timer->SYNCBUSY.bit.CC1); break;
@@ -191,25 +70,9 @@ void DualHardwarePWM::setDutyCycle(Tcc* timer, uint8_t cc_channel, float percent
 }
 
 void DualHardwarePWM::setDutyCycle1(float percent) {
-    setDutyCycle(_timer1, _cc_channel1, percent);
+    if (_timer1) setDutyCycle(_timer1, 2, percent);  // Channel 2 for TCC0 (WO[2])
 }
 
 void DualHardwarePWM::setDutyCycle2(float percent) {
-    setDutyCycle(_timer2, _cc_channel2, percent);
-}
-
-// Safely disable PWM and reset pins
-void DualHardwarePWM::end() {
-    // Disable timers
-    if (_timer1) {
-        _timer1->CTRLA.bit.ENABLE = 0;
-        while (_timer1->SYNCBUSY.bit.ENABLE);
-    }
-    if (_timer2 && _timer2 != _timer1) {
-        _timer2->CTRLA.bit.ENABLE = 0;
-        while (_timer2->SYNCBUSY.bit.ENABLE);
-    }
-    // Reset pins to default state
-    pinMode(_pin1, INPUT);
-    pinMode(_pin2, INPUT);
+    if (_timer2) setDutyCycle(_timer2, 0, percent);  // Channel 0 for TCC1 (WO[0])
 }
