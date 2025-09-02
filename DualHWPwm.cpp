@@ -7,22 +7,22 @@ DualHardwarePWM::DualHardwarePWM(uint8_t pin1, uint8_t pin2)
 void DualHardwarePWM::begin(uint32_t frequency) {
     _frequency = frequency;
 
-    // Configure Pin 10 (PA18, TCC0/WO[2])
-    if (_pin1 == 10) {
-        PM->APBCMASK.reg |= PM_APBCMASK_TCC0;  // Enable TCC0 clock
-        _timer1 = TCC0;
-        PORT->Group[PORTA].PINCFG[18].bit.PMUXEN = 1;
-        PORT->Group[PORTA].PMUX[9].bit.PMUXE = PORT_PMUX_PMUXE_E_Val;  // Function E
-        configureTimer(_timer1, TCC0_GCLK_ID);
+    // Configure Pin 9 (PA07, TCC1/WO[1])
+    if (_pin1 == 9) {
+        PM->APBCMASK.reg |= PM_APBCMASK_TCC1;  // Enable TCC1 clock
+        _timer1 = TCC1;
+        PORT->Group[PORTA].PINCFG[7].bit.PMUXEN = 1;
+        PORT->Group[PORTA].PMUX[3].bit.PMUXO = PORT_PMUX_PMUXO_E_Val;  // Function E
+        configureTimer(_timer1, TCC1_GCLK_ID);
     }
 
-    // Configure Pin 11 (PA16, TCC1/WO[0])
-    if (_pin2 == 11) {
-        PM->APBCMASK.reg |= PM_APBCMASK_TCC1;  // Enable TCC1 clock
-        _timer2 = TCC1;
-        PORT->Group[PORTA].PINCFG[16].bit.PMUXEN = 1;
-        PORT->Group[PORTA].PMUX[8].bit.PMUXE = PORT_PMUX_PMUXE_E_Val;  // Function E
-        configureTimer(_timer2, TCC1_GCLK_ID);
+    // Configure Pin 5 (PA15, TCC0/WO[1])
+    if (_pin2 == 5) {
+        PM->APBCMASK.reg |= PM_APBCMASK_TCC0;  // Enable TCC0 clock
+        _timer2 = TCC0;
+        PORT->Group[PORTA].PINCFG[15].bit.PMUXEN = 1;
+        PORT->Group[PORTA].PMUX[7].bit.PMUXO = PORT_PMUX_PMUXO_F_Val;  // Function F (TCC0/WO[5])
+        configureTimer(_timer2, TCC0_GCLK_ID);
     }
 }
 
@@ -54,7 +54,7 @@ void DualHardwarePWM::configureTimer(Tcc* timer, uint8_t gclk_id) {
     while (timer->SYNCBUSY.bit.ENABLE);
 }
 
-void DualHardwarePWM::setDutyCycle(Tcc* timer, uint8_t cc_channel, float percent) {
+void DualHardwarePWM::setDutyCycle(Tcc* timer, uint8_t cc_channel, uint8_t percent) {
     if (!timer) return;
     
     const uint32_t per = timer->PER.reg;
@@ -64,15 +64,13 @@ void DualHardwarePWM::setDutyCycle(Tcc* timer, uint8_t cc_channel, float percent
     switch (cc_channel) {
         case 0: while (timer->SYNCBUSY.bit.CC0); break;
         case 1: while (timer->SYNCBUSY.bit.CC1); break;
-        case 2: while (timer->SYNCBUSY.bit.CC2); break;
-        case 3: while (timer->SYNCBUSY.bit.CC3); break;
     }
 }
 
-void DualHardwarePWM::setDutyCycle1(float percent) {
-    if (_timer1) setDutyCycle(_timer1, 2, percent);  // Channel 2 for TCC0 (WO[2])
+void DualHardwarePWM::setDutyCycle1(uint8_t percent) {
+    if (_timer1) setDutyCycle(_timer1, 1, percent);
 }
 
-void DualHardwarePWM::setDutyCycle2(float percent) {
-    if (_timer2) setDutyCycle(_timer2, 0, percent);  // Channel 0 for TCC1 (WO[0])
+void DualHardwarePWM::setDutyCycle2(uint8_t percent) {
+    if (_timer2) setDutyCycle(_timer2, 1, percent);
 }

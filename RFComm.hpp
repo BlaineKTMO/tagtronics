@@ -10,7 +10,7 @@ struct RF69_Packet {
     uint8_t sender_id;
     uint8_t receiver_id;
     uint8_t command;
-    char payload[50];  // Reduced size to fit in RadioHead's max message length
+    char payload[50];
 };
 #pragma pack(pop)
 
